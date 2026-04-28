@@ -127,7 +127,7 @@ async function readPiAuthApiKey() {
 }
 
 function modelBaseUrl(baseUrl: string, owner?: string) {
-  return owner === "anthropic" ? `${baseUrl}/anthropic/v1` : `${baseUrl}/v1`;
+  return owner === "anthropic" ? `${baseUrl}/anthropic` : `${baseUrl}/v1`;
 }
 
 function emptyErrorModel(model: Model<Api>, error: unknown) {
