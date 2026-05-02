@@ -1,14 +1,4 @@
-import {
-  createAssistantMessageEventStream,
-  streamSimpleAnthropic,
-  streamSimpleGoogle,
-  streamSimpleOpenAICompletions,
-  type Api,
-  type AssistantMessageEventStream,
-  type Context,
-  type Model,
-  type SimpleStreamOptions,
-} from "@mariozechner/pi-ai";
+import { type Api } from "@mariozechner/pi-ai";
 import { getAgentDir, type ExtensionAPI, type ProviderModelConfig } from "@mariozechner/pi-coding-agent";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -91,11 +81,7 @@ type ModelsDevMatch = {
   model: ModelsDevModel;
 };
 
-type AxonHubModelConfig = ProviderModelConfig & {
-  owner?: string;
-};
-
-const axonhubModels = new Map<string, AxonHubModelConfig>();
+type AxonHubModelConfig = ProviderModelConfig;
 
 function normalizeBaseUrl(baseUrl: string) {
   return baseUrl.replace(/\/v1\/?$/, "").replace(/\/+$/, "");
@@ -127,60 +113,6 @@ async function readPiAuthApiKey() {
   }
 }
 
-function modelBaseUrl(baseUrl: string, owner?: string) {
-  if (owner === "anthropic") return `${baseUrl}/anthropic`;
-  if (owner === "gemini") return `${baseUrl}/gemini/v1beta`;
-  return `${baseUrl}/v1`;
-}
-
-function emptyErrorModel(model: Model<Api>, error: unknown) {
-  return {
-    role: "assistant" as const,
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: "error" as const,
-    errorMessage: error instanceof Error ? error.message : String(error),
-    timestamp: Date.now(),
-  };
-}
-
-function streamAxonHub(model: Model<Api>, context: Context, options?: SimpleStreamOptions): AssistantMessageEventStream {
-  const stream = createAssistantMessageEventStream();
-
-  (async () => {
-    try {
-      const config = axonhubModels.get(model.id);
-      const owner = config?.owner;
-      const baseUrl = modelBaseUrl(normalizeBaseUrl(model.baseUrl), owner);
-      const api: Api = owner === "anthropic" ? "anthropic-messages" : owner === "gemini" ? "google-generative-ai" : "openai-completions";
-      const modelWithEndpoint = { ...model, api, baseUrl } as Model<Api>;
-      const inner =
-        api === "anthropic-messages"
-          ? streamSimpleAnthropic(modelWithEndpoint as Model<"anthropic-messages">, context, options)
-          : api === "google-generative-ai"
-            ? streamSimpleGoogle(modelWithEndpoint as Model<"google-generative-ai">, context, options)
-            : streamSimpleOpenAICompletions(modelWithEndpoint as Model<"openai-completions">, context, options);
-
-      for await (const event of inner) stream.push(event);
-      stream.end();
-    } catch (error) {
-      stream.push({ type: "error", reason: "error", error: emptyErrorModel(model, error) });
-      stream.end();
-    }
-  })();
-
-  return stream;
-}
 
 async function readFreshCache<T>(file: string, ttl: number) {
   try {
@@ -293,11 +225,34 @@ function hasModality(model: ModelsDevModel | undefined, direction: "input" | "ou
   return model?.modalities?.[direction]?.includes(modality);
 }
 
-function ownerFromMatch(item: AxonHubModel, match?: ModelsDevMatch) {
-  return item.owned_by ?? (match?.providerId === "anthropic" ? "anthropic" : match?.providerId === "google" ? "gemini" : match?.providerId === "openai" ? "openai" : undefined);
+const OWNER_BY_PROVIDER_ID: Record<string, "anthropic" | "gemini" | "openai"> = {
+  anthropic: "anthropic",
+  gemini: "gemini",
+  google: "gemini",
+  openai: "openai",
+};
+
+function normalizeOwner(owner?: string) {
+  return owner ? OWNER_BY_PROVIDER_ID[owner] : undefined;
 }
 
-function toProviderModel(item: AxonHubModel, match?: ModelsDevMatch): AxonHubModelConfig | undefined {
+function ownerFromMatch(item: AxonHubModel, match?: ModelsDevMatch) {
+  return normalizeOwner(item.owned_by) ?? normalizeOwner(match?.providerId);
+}
+
+function modelApi(owner?: string): Api {
+  if (owner === "anthropic") return "anthropic-messages";
+  if (owner === "gemini") return "google-generative-ai";
+  return "openai-completions";
+}
+
+function modelBaseUrl(baseUrl: string, owner?: string) {
+  if (owner === "anthropic") return `${baseUrl}/anthropic`;
+  if (owner === "gemini") return `${baseUrl}/gemini/v1beta`;
+  return `${baseUrl}/v1`;
+}
+
+function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevMatch): AxonHubModelConfig | undefined {
   if (!item.id) return;
 
   const cached = match?.model;
@@ -317,6 +272,7 @@ function toProviderModel(item: AxonHubModel, match?: ModelsDevMatch): AxonHubMod
   return {
     id: item.id,
     name: item.name ?? item.display_name ?? cached?.name ?? item.id,
+    api: modelApi(owner),
     reasoning: item.capabilities?.reasoning ?? cached?.reasoning ?? true,
     input: supportsVision ? ["text", "image"] : ["text"],
     cost: {
@@ -328,7 +284,7 @@ function toProviderModel(item: AxonHubModel, match?: ModelsDevMatch): AxonHubMod
     contextWindow: item.context_length ?? cached?.limit?.context ?? 200000,
     maxTokens: item.max_output_tokens ?? cached?.limit?.output ?? 32000,
     compat,
-    owner,
+    baseUrl: modelBaseUrl(baseUrl, owner),
   };
 }
 
@@ -341,17 +297,12 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   const [payload, modelsDev] = await Promise.all([loadModels(baseUrl, key, ttl), loadModelsDev(ttl)]);
   const modelIndex = modelsDevIndex(modelsDev);
   const models = (payload.data ?? [])
-    .map((item) => toProviderModel(item, modelsDevMatch(item, modelIndex)))
+    .map((item) => toProviderModel(baseUrl, item, modelsDevMatch(item, modelIndex)))
     .filter((model): model is AxonHubModelConfig => model !== undefined);
-
-  axonhubModels.clear();
-  for (const model of models) axonhubModels.set(model.id, model);
 
   pi.registerProvider(PROVIDER_ID, {
     baseUrl,
     apiKey: options?.apiKey ?? "AXONHUB_API_KEY",
-    api: "axonhub",
     models,
-    streamSimple: streamAxonHub,
   });
 }

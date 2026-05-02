@@ -94,6 +94,7 @@ declare module "@mariozechner/pi-coding-agent" {
     id: string;
     name: string;
     api?: Api;
+    baseUrl?: string;
     reasoning: boolean;
     input: ("text" | "image")[];
     cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
