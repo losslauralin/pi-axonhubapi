@@ -253,22 +253,37 @@ function modelBaseUrl(baseUrl: string, owner?: string) {
   return `${baseUrl}/v1`;
 }
 
+function isAnthropicAdaptiveThinkingModel(id: string) {
+  return (
+    id.includes("opus-4-6") ||
+    id.includes("opus-4.6") ||
+    id.includes("opus-4-7") ||
+    id.includes("opus-4.7") ||
+    id.includes("sonnet-4-6") ||
+    id.includes("sonnet-4.6")
+  );
+}
+
+function modelCompat(id: string, owner?: string): ProviderModelConfig["compat"] | undefined {
+  if (owner === "anthropic") {
+    return isAnthropicAdaptiveThinkingModel(id) ? { forceAdaptiveThinking: true } : undefined;
+  }
+  if (owner === "gemini") return undefined;
+  return {
+    supportsStore: false,
+    supportsDeveloperRole: false,
+    supportsReasoningEffort: false,
+    maxTokensField: "max_tokens" as const,
+    thinkingFormat: "openai" as const,
+  };
+}
+
 function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevMatch): AxonHubModelConfig | undefined {
   if (!item.id) return;
 
   const cached = match?.model;
   const owner = ownerFromMatch(item, match);
   const supportsVision = item.capabilities?.vision ?? cached?.attachment ?? hasModality(cached, "input", "image") ?? true;
-  const compat =
-    owner === "anthropic" || owner === "gemini"
-      ? undefined
-      : {
-          supportsStore: false,
-          supportsDeveloperRole: false,
-          supportsReasoningEffort: false,
-          maxTokensField: "max_tokens" as const,
-          thinkingFormat: "openai" as const,
-        };
 
   return {
     id: item.id,
@@ -284,7 +299,7 @@ function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevM
     },
     contextWindow: item.context_length ?? cached?.limit?.context ?? 200000,
     maxTokens: item.max_output_tokens ?? cached?.limit?.output ?? 32000,
-    compat,
+    compat: modelCompat(item.id, owner),
     baseUrl: modelBaseUrl(baseUrl, owner),
   };
 }
