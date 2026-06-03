@@ -318,7 +318,7 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
 
   pi.registerProvider(PROVIDER_ID, {
     baseUrl,
-    apiKey: options?.apiKey ?? "AXONHUB_API_KEY",
+    apiKey: options?.apiKey ?? "$AXONHUB_API_KEY",
     models,
   });
 
