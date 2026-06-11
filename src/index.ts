@@ -46,11 +46,18 @@ type AxonHubModelsResponse = {
   data?: AxonHubModel[];
 };
 
+type ModelsDevReasoningOption = {
+  type?: string;
+  values?: string[];
+  min?: number;
+};
+
 type ModelsDevModel = {
   id?: string;
   name?: string;
   attachment?: boolean;
   reasoning?: boolean;
+  reasoning_options?: ModelsDevReasoningOption[];
   tool_call?: boolean;
   modalities?: {
     input?: string[];
@@ -253,26 +260,40 @@ function modelBaseUrl(baseUrl: string, owner?: string) {
   return `${baseUrl}/v1`;
 }
 
-function isAnthropicAdaptiveThinkingModel(id: string) {
-  return (
-    id.includes("opus-4-6") ||
-    id.includes("opus-4.6") ||
-    id.includes("opus-4-7") ||
-    id.includes("opus-4.7") ||
-    id.includes("sonnet-4-6") ||
-    id.includes("sonnet-4.6")
-  );
+function getEffortValues(cached?: ModelsDevModel): string[] | undefined {
+  const opt = cached?.reasoning_options?.find((o) => o.type === "effort");
+  return opt?.values;
 }
 
-function modelCompat(id: string, owner?: string): ProviderModelConfig["compat"] | undefined {
+function buildThinkingLevelMap(effortValues: string[] | undefined): Record<string, string> | undefined {
+  if (!effortValues || effortValues.length === 0) return undefined;
+  const set = new Set(effortValues);
+  const map: Record<string, string> = {};
+  for (const level of ["minimal", "low", "medium", "high", "xhigh"]) {
+    if (set.has(level)) {
+      map[level] = level;
+    }
+  }
+  if (set.has("max") && !set.has("xhigh")) {
+    map["xhigh"] = "max";
+  }
+  return Object.keys(map).length > 0 ? map : undefined;
+}
+
+function modelCompat(
+  id: string,
+  owner: string | undefined,
+  effortValues: string[] | undefined,
+): ProviderModelConfig["compat"] | undefined {
+  const hasEffort = effortValues !== undefined && effortValues.length > 0;
   if (owner === "anthropic") {
-    return isAnthropicAdaptiveThinkingModel(id) ? { forceAdaptiveThinking: true } : undefined;
+    return hasEffort ? { forceAdaptiveThinking: true } : undefined;
   }
   if (owner === "gemini") return undefined;
   return {
     supportsStore: false,
     supportsDeveloperRole: false,
-    supportsReasoningEffort: false,
+    supportsReasoningEffort: hasEffort,
     maxTokensField: "max_tokens" as const,
     thinkingFormat: "openai" as const,
   };
@@ -284,6 +305,7 @@ function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevM
   const cached = match?.model;
   const owner = ownerFromMatch(item, match);
   const supportsVision = item.capabilities?.vision ?? cached?.attachment ?? hasModality(cached, "input", "image") ?? true;
+  const effortValues = getEffortValues(cached);
 
   return {
     id: item.id,
@@ -299,7 +321,8 @@ function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevM
     },
     contextWindow: item.context_length ?? cached?.limit?.context ?? 200000,
     maxTokens: item.max_output_tokens ?? cached?.limit?.output ?? 32000,
-    compat: modelCompat(item.id, owner),
+    thinkingLevelMap: buildThinkingLevelMap(effortValues),
+    compat: modelCompat(item.id, owner, effortValues),
     baseUrl: modelBaseUrl(baseUrl, owner),
   };
 }

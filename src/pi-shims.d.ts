@@ -96,6 +96,7 @@ declare module "@earendil-works/pi-coding-agent" {
     api?: Api;
     baseUrl?: string;
     reasoning: boolean;
+    thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
     input: ("text" | "image")[];
     cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
     contextWindow: number;
