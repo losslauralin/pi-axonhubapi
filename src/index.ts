@@ -269,7 +269,7 @@ function buildThinkingLevelMap(effortValues: string[] | undefined): Record<strin
   if (!effortValues || effortValues.length === 0) return undefined;
   const set = new Set(effortValues);
   const map: Record<string, string> = {};
-  for (const level of ["minimal", "low", "medium", "high", "xhigh"]) {
+  for (const level of ["minimal", "low", "medium", "high", "xhigh", "max"]) {
     if (set.has(level)) {
       map[level] = level;
     }
