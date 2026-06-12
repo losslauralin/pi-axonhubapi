@@ -6,17 +6,23 @@ AxonHub models are cached at `~/.cache/pi/axonhub-models.json` for one day. `mod
 
 ## Usage
 
-Install the package into Pi's global settings:
+Install from GitHub:
 
 ```sh
-pi install npm:@pandada8/pi-axonhub
+pi install git:github.com/losslauralin/pi-axonhubapi
 ```
 
-This writes the package to `~/.pi/agent/settings.json` under `packages`. You can also edit it manually:
+Or use locally for development:
+
+```sh
+pi -e /path/to/pi-axonhub
+```
+
+This writes the package to `~/.pi/agent/settings.json`. You can also edit it manually:
 
 ```json
 {
-  "packages": ["npm:@pandada8/pi-axonhub"]
+  "packages": ["git:github.com/losslauralin/pi-axonhubapi"]
 }
 ```
 
@@ -77,7 +83,7 @@ Add the `useMaxEffort` option to your `~/.pi/agent/settings.json`:
 {
   "packages": [
     {
-      "package": "npm:@pandada8/pi-axonhub",
+      "package": "git:github.com/losslauralin/pi-axonhubapi",
       "options": {
         "useMaxEffort": true
       }
