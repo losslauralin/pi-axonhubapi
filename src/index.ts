@@ -389,20 +389,29 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   pi.registerCommand("axonhub-max", {
     description: "Toggle max effort mode for AxonHub Claude models (xhigh -> max)",
     handler: async (args: string, ctx: any) => {
+      console.log("[axonhub-max] Command invoked, current useMaxEffort:", useMaxEffort);
+
       useMaxEffort = !useMaxEffort;
+      console.log("[axonhub-max] Toggled to:", useMaxEffort);
 
       // Re-register provider with new setting
       await updateProvider();
+      console.log("[axonhub-max] Provider updated");
 
       const status = useMaxEffort ? "enabled" : "disabled";
       const mapping = useMaxEffort ? "xhigh -> max" : "xhigh -> xhigh";
+      const message = `AxonHub max effort ${status} (${mapping})`;
 
-      ctx.ui.notify(`✨ AxonHub max effort ${status} (${mapping})`, "success");
+      console.log("[axonhub-max] Sending notification:", message);
+      ctx.ui.notify(message, "success");
 
       // If currently using an axonhub model, suggest switching to refresh
       if (ctx.model?.provider === PROVIDER_ID) {
-        ctx.ui.notify("💡 Switch models (Ctrl+P) to apply the new mapping", "info");
+        console.log("[axonhub-max] Current model is axonhub, sending switch suggestion");
+        ctx.ui.notify("Switch models (Ctrl+P) to apply the new mapping", "info");
       }
+
+      console.log("[axonhub-max] Command completed");
     },
   });
 
