@@ -400,10 +400,6 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
 
       const status = useMaxEffort ? "enabled" : "disabled";
       const mapping = useMaxEffort ? "xhigh -> max" : "xhigh -> xhigh";
-      const message = `AxonHub max effort ${status} (${mapping})`;
-
-      console.log("[axonhub-max] Sending notification:", message);
-      ctx.ui.notify(message, "success");
 
       // If currently using an axonhub model, refresh it to apply the new mapping
       if (ctx.model?.provider === PROVIDER_ID) {
@@ -416,12 +412,17 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
           const success = await pi.setModel(refreshedModel);
           if (success) {
             console.log("[axonhub-max] Model refreshed successfully");
-            ctx.ui.notify("Current model updated with new mapping", "info");
+            const message = `AxonHub max effort ${status} (${mapping}) - applied to current model`;
+            ctx.ui.notify(message, "success");
           } else {
             console.log("[axonhub-max] Failed to refresh model");
-            ctx.ui.notify("Switch models (Ctrl+P) to apply the new mapping", "info");
+            ctx.ui.notify(`Max effort ${status}, but failed to refresh. Switch models (Ctrl+P) to apply.`, "warning");
           }
         }
+      } else {
+        // Not using axonhub model
+        const message = `AxonHub max effort ${status} (${mapping})`;
+        ctx.ui.notify(message, "success");
       }
 
       console.log("[axonhub-max] Command completed");
