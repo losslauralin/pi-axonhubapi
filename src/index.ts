@@ -417,21 +417,37 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   pi.on("before_provider_request", (event: { payload: unknown }, ctx: { model?: { provider: string; id: string } }) => {
     const model = ctx.model;
     if (model?.provider !== PROVIDER_ID) return;
-    if (!model.id.startsWith("gpt-")) return;
 
-    const payload = event.payload as {
-      tools?: Array<{ type: string; name?: string; [key: string]: unknown }>;
-      [key: string]: unknown;
-    };
+    // Handle GPT models: inject web_search tool
+    if (model.id.startsWith("gpt-")) {
+      const payload = event.payload as {
+        tools?: Array<{ type: string; name?: string; [key: string]: unknown }>;
+        [key: string]: unknown;
+      };
 
-    // Add web_search built-in tool
-    const webSearchTool = { type: "web_search" as const };
-    const existingTools = payload.tools ?? [];
-    const hasWebSearch = existingTools.some((t) => t.type === "web_search");
-    if (!hasWebSearch) {
-      payload.tools = [...existingTools, webSearchTool];
+      // Add web_search built-in tool
+      const webSearchTool = { type: "web_search" as const };
+      const existingTools = payload.tools ?? [];
+      const hasWebSearch = existingTools.some((t) => t.type === "web_search");
+      if (!hasWebSearch) {
+        payload.tools = [...existingTools, webSearchTool];
+      }
     }
 
-    return payload;
+    // Handle Claude models: override effort mapping if useMaxEffort is enabled
+    if (useMaxEffort && model.id.startsWith("claude-")) {
+      const payload = event.payload as {
+        thinking?: { type: string; budget?: number; effort?: string };
+        [key: string]: unknown;
+      };
+
+      // If request has adaptive thinking with effort "xhigh", change to "max"
+      if (payload.thinking?.type === "adaptive" && payload.thinking.effort === "xhigh") {
+        console.log("[axonhub] Overriding effort: xhigh -> max");
+        payload.thinking.effort = "max";
+      }
+    }
+
+    return event.payload;
   });
 }
