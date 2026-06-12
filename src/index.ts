@@ -366,12 +366,17 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   // State: track whether useMaxEffort is enabled
   let useMaxEffort = options?.useMaxEffort ?? false;
 
+  // Load models once
+  const [payload, modelsDev] = await Promise.all([loadModels(baseUrl, key, ttl), loadModelsDev(ttl)]);
+  const modelIndex = modelsDevIndex(modelsDev);
+  const baseModels = (payload.data ?? [])
+    .map((item) => ({ item, match: modelsDevMatch(item, modelIndex) }))
+    .filter((x) => x.item.id);
+
   // Function to register/update provider with current useMaxEffort setting
-  async function updateProvider() {
-    const [payload, modelsDev] = await Promise.all([loadModels(baseUrl, key, ttl), loadModelsDev(ttl)]);
-    const modelIndex = modelsDevIndex(modelsDev);
-    const models = (payload.data ?? [])
-      .map((item) => toProviderModel(baseUrl, item, modelsDevMatch(item, modelIndex), useMaxEffort))
+  function updateProvider() {
+    const models = baseModels
+      .map(({ item, match }) => toProviderModel(baseUrl, item, match, useMaxEffort))
       .filter((model): model is AxonHubModelConfig => model !== undefined);
 
     pi.registerProvider(PROVIDER_ID, {
@@ -382,7 +387,7 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   }
 
   // Initial provider registration
-  await updateProvider();
+  updateProvider();
 
   // Register command to toggle max effort
   // @ts-expect-error - ExtensionAPI.registerCommand exists at runtime via jiti
@@ -394,9 +399,8 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
       useMaxEffort = !useMaxEffort;
       console.log("[axonhub-max] Toggled to:", useMaxEffort);
 
-      // Re-register provider with new setting
-      // This takes effect immediately for the next API call
-      await updateProvider();
+      // Re-register provider with new setting (synchronous, just rebuilds models)
+      updateProvider();
       console.log("[axonhub-max] Provider updated");
 
       const status = useMaxEffort ? "enabled" : "disabled";
