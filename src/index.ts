@@ -267,16 +267,41 @@ function getEffortValues(cached?: ModelsDevModel): string[] | undefined {
 
 function buildThinkingLevelMap(effortValues: string[] | undefined): Record<string, string> | undefined {
   if (!effortValues || effortValues.length === 0) return undefined;
-  const set = new Set(effortValues);
+
+  const supported = new Set(effortValues);
   const map: Record<string, string> = {};
-  for (const level of ["minimal", "low", "medium", "high", "xhigh", "max"]) {
-    if (set.has(level)) {
-      map[level] = level;
-    }
+
+  // Map Pi's ThinkingLevel ("minimal" | "low" | "medium" | "high" | "xhigh")
+  // to Anthropic's effort values ("low" | "medium" | "high" | "xhigh" | "max")
+
+  // minimal and low -> "low" (Anthropic has no "minimal")
+  if (supported.has("low")) {
+    map["minimal"] = "low";
+    map["low"] = "low";
   }
-  if (set.has("max") && !set.has("xhigh")) {
+
+  // medium -> "medium"
+  if (supported.has("medium")) {
+    map["medium"] = "medium";
+  }
+
+  // high -> "high"
+  if (supported.has("high")) {
+    map["high"] = "high";
+  }
+
+  // xhigh mapping strategy:
+  // - Prefer "xhigh" if supported (Opus 4.7+, Fable 5)
+  // - Fall back to "max" if supported (Opus 4.6)
+  // - Otherwise fall back to "high"
+  if (supported.has("xhigh")) {
+    map["xhigh"] = "xhigh";
+  } else if (supported.has("max")) {
     map["xhigh"] = "max";
+  } else if (supported.has("high")) {
+    map["xhigh"] = "high";
   }
+
   return Object.keys(map).length > 0 ? map : undefined;
 }
 

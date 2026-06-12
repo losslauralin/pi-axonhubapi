@@ -1,2 +1,6 @@
 node_modules/
 *.tsbuildinfo
+
+# Pix Agent
+.ai/
+.pi-lens/
