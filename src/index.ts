@@ -405,10 +405,23 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
       console.log("[axonhub-max] Sending notification:", message);
       ctx.ui.notify(message, "success");
 
-      // If currently using an axonhub model, suggest switching to refresh
+      // If currently using an axonhub model, refresh it to apply the new mapping
       if (ctx.model?.provider === PROVIDER_ID) {
-        console.log("[axonhub-max] Current model is axonhub, sending switch suggestion");
-        ctx.ui.notify("Switch models (Ctrl+P) to apply the new mapping", "info");
+        console.log("[axonhub-max] Refreshing current axonhub model");
+        const currentModelId = ctx.model.id;
+        const refreshedModel = ctx.modelRegistry.find(PROVIDER_ID, currentModelId);
+
+        if (refreshedModel) {
+          // Re-set the same model to reload its configuration
+          const success = await pi.setModel(refreshedModel);
+          if (success) {
+            console.log("[axonhub-max] Model refreshed successfully");
+            ctx.ui.notify("Current model updated with new mapping", "info");
+          } else {
+            console.log("[axonhub-max] Failed to refresh model");
+            ctx.ui.notify("Switch models (Ctrl+P) to apply the new mapping", "info");
+          }
+        }
       }
 
       console.log("[axonhub-max] Command completed");
