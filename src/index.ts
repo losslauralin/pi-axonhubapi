@@ -15,6 +15,7 @@ type PluginOptions = {
   baseUrl?: string;
   apiKey?: string;
   cacheTtl?: number;
+  useMaxEffort?: boolean;
 };
 
 type AxonHubModel = {
@@ -265,7 +266,7 @@ function getEffortValues(cached?: ModelsDevModel): string[] | undefined {
   return opt?.values;
 }
 
-function buildThinkingLevelMap(effortValues: string[] | undefined): Record<string, string> | undefined {
+function buildThinkingLevelMap(effortValues: string[] | undefined, useMaxEffort?: boolean): Record<string, string> | undefined {
   if (!effortValues || effortValues.length === 0) return undefined;
 
   const supported = new Set(effortValues);
@@ -291,10 +292,13 @@ function buildThinkingLevelMap(effortValues: string[] | undefined): Record<strin
   }
 
   // xhigh mapping strategy:
-  // - Prefer "xhigh" if supported (Opus 4.7+, Fable 5)
+  // - If useMaxEffort is true and model supports "max", use "max"
+  // - Otherwise prefer "xhigh" if supported (Opus 4.7+, Fable 5)
   // - Fall back to "max" if supported (Opus 4.6)
   // - Otherwise fall back to "high"
-  if (supported.has("xhigh")) {
+  if (useMaxEffort && supported.has("max")) {
+    map["xhigh"] = "max";
+  } else if (supported.has("xhigh")) {
     map["xhigh"] = "xhigh";
   } else if (supported.has("max")) {
     map["xhigh"] = "max";
@@ -324,7 +328,7 @@ function modelCompat(
   };
 }
 
-function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevMatch): AxonHubModelConfig | undefined {
+function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevMatch, useMaxEffort?: boolean): AxonHubModelConfig | undefined {
   if (!item.id) return;
 
   const cached = match?.model;
@@ -346,7 +350,7 @@ function toProviderModel(baseUrl: string, item: AxonHubModel, match?: ModelsDevM
     },
     contextWindow: item.context_length ?? cached?.limit?.context ?? 200000,
     maxTokens: item.max_output_tokens ?? cached?.limit?.output ?? 32000,
-    thinkingLevelMap: buildThinkingLevelMap(effortValues),
+    thinkingLevelMap: buildThinkingLevelMap(effortValues, useMaxEffort),
     compat: modelCompat(item.id, owner, effortValues),
     baseUrl: modelBaseUrl(baseUrl, owner),
   };
@@ -358,16 +362,48 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
   if (!key) return;
 
   const ttl = options?.cacheTtl ?? CACHE_TTL;
-  const [payload, modelsDev] = await Promise.all([loadModels(baseUrl, key, ttl), loadModelsDev(ttl)]);
-  const modelIndex = modelsDevIndex(modelsDev);
-  const models = (payload.data ?? [])
-    .map((item) => toProviderModel(baseUrl, item, modelsDevMatch(item, modelIndex)))
-    .filter((model): model is AxonHubModelConfig => model !== undefined);
 
-  pi.registerProvider(PROVIDER_ID, {
-    baseUrl,
-    apiKey: options?.apiKey ?? "$AXONHUB_API_KEY",
-    models,
+  // State: track whether useMaxEffort is enabled
+  let useMaxEffort = options?.useMaxEffort ?? false;
+
+  // Function to register/update provider with current useMaxEffort setting
+  async function updateProvider() {
+    const [payload, modelsDev] = await Promise.all([loadModels(baseUrl, key, ttl), loadModelsDev(ttl)]);
+    const modelIndex = modelsDevIndex(modelsDev);
+    const models = (payload.data ?? [])
+      .map((item) => toProviderModel(baseUrl, item, modelsDevMatch(item, modelIndex), useMaxEffort))
+      .filter((model): model is AxonHubModelConfig => model !== undefined);
+
+    pi.registerProvider(PROVIDER_ID, {
+      baseUrl,
+      apiKey: options?.apiKey ?? "$AXONHUB_API_KEY",
+      models,
+    });
+  }
+
+  // Initial provider registration
+  await updateProvider();
+
+  // Register command to toggle max effort
+  // @ts-expect-error - ExtensionAPI.registerCommand exists at runtime via jiti
+  pi.registerCommand("axonhub-max", {
+    description: "Toggle max effort mode for AxonHub Claude models (xhigh -> max)",
+    handler: async (args: string, ctx: any) => {
+      useMaxEffort = !useMaxEffort;
+
+      // Re-register provider with new setting
+      await updateProvider();
+
+      const status = useMaxEffort ? "enabled" : "disabled";
+      const mapping = useMaxEffort ? "xhigh -> max" : "xhigh -> xhigh";
+
+      ctx.ui.notify(`✨ AxonHub max effort ${status} (${mapping})`, "success");
+
+      // If currently using an axonhub model, suggest switching to refresh
+      if (ctx.model?.provider === PROVIDER_ID) {
+        ctx.ui.notify("💡 Switch models (Ctrl+P) to apply the new mapping", "info");
+      }
+    },
   });
 
   // Inject web_search tool for gpt-* models from axonhub

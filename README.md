@@ -48,3 +48,51 @@ pi -e /path/to/pi-axonhub
 ```
 
 OpenAI-compatible models are sent to AxonHub `/v1`. Anthropic-owned models are sent to AxonHub `/anthropic`. Gemini-owned models are sent to AxonHub `/gemini`.
+
+## Max Effort Support
+
+By default, the extension maps Pi's `xhigh` thinking level to Anthropic's `xhigh` effort for Claude Opus 4.7+/Fable 5, and to `max` for Opus 4.6 (which doesn't support `xhigh`).
+
+To enable **max effort** for all supported Claude models (mapping `xhigh` -> `max`), use one of these methods:
+
+### Method 1: Command (Dynamic Toggle)
+
+Use the `/axonhub-max` command to toggle max effort on/off during a session:
+
+```sh
+/axonhub-max
+```
+
+This will show:
+- `✨ AxonHub max effort enabled (xhigh -> max)` - when turning it on
+- `✨ AxonHub max effort disabled (xhigh -> xhigh)` - when turning it off
+
+After toggling, switch models (Ctrl+P) to apply the new mapping.
+
+### Method 2: Configuration (Persistent)
+
+Add the `useMaxEffort` option to your `~/.pi/agent/settings.json`:
+
+```json
+{
+  "packages": [
+    {
+      "package": "npm:@pandada8/pi-axonhub",
+      "options": {
+        "useMaxEffort": true
+      }
+    }
+  ]
+}
+```
+
+This setting persists across sessions.
+
+### How It Works
+
+- **Default behavior**: `xhigh` -> `xhigh` (Opus 4.7+/Fable 5), `xhigh` -> `max` (Opus 4.6 fallback)
+- **With useMaxEffort**: `xhigh` -> `max` (all models that support it)
+
+When max effort is enabled, selecting `xhigh` in Pi (Shift+Tab) will send `max` effort to the Claude API, giving you the absolute maximum capability.
+
+**Note**: According to Claude's documentation, `max` effort should be reserved for genuinely frontier problems, as it can lead to overthinking and higher costs on routine tasks. Use `xhigh` (default) for most coding and agentic work.
