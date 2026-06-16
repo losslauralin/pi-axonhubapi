@@ -217,7 +217,15 @@ function modelsDevIndex(payload: ModelsDevResponse) {
 
 function modelsDevMatch(item: AxonHubModel, index: Map<string, ModelsDevMatch[]>) {
   if (!item.id) return;
-  const matches = index.get(item.id);
+
+  // Try direct match first
+  let matches = index.get(item.id);
+
+  // If no match, try with common provider prefixes
+  if (!matches?.length && item.owned_by) {
+    matches = index.get(`${item.owned_by}/${item.id}`);
+  }
+
   if (!matches?.length) return;
 
   const owner = item.owned_by;
@@ -435,7 +443,9 @@ export default async function (pi: ExtensionAPI, options?: PluginOptions) {
     }
 
     // Handle Claude models: override effort mapping if useMaxEffort is enabled
-    if (useMaxEffort && model.id.startsWith("claude-")) {
+    // AxonHub model IDs are like "claude-opus-4-7", "claude-sonnet-4-6", etc.
+    const isClaudeModel = model.id.startsWith("claude-opus-") || model.id.startsWith("claude-sonnet-") || model.id.startsWith("claude-haiku-") || model.id === "claude-sonnet-4" || model.id === "claude-opus-4";
+    if (useMaxEffort && isClaudeModel) {
       const payload = event.payload as {
         thinking?: { type: string; budget?: number; effort?: string };
         [key: string]: unknown;
