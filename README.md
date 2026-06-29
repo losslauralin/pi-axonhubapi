@@ -2,7 +2,7 @@
 
 Pi extension that discovers AxonHub models from `/v1/models` and `/v1/models?include=all`, enriches them with cached metadata from `https://models.dev/api.json`, and registers them as the `axonhub` provider.
 
-AxonHub models are cached at `~/.cache/pi/axonhub-models.json` for one day. `models.dev` metadata is cached at `~/.cache/pi/models-dev-api.json` for one day. Models are loaded once at startup and cached in memory; toggling max effort rebuilds from this cache without re-fetching. If no API key is configured, the extension does not register the provider.
+AxonHub models are cached at `~/.cache/pi/axonhub-models.json` for one day. `models.dev` metadata is cached at `~/.cache/pi/models-dev-api.json` for one day. If no API key is configured, the extension does not register the provider.
 
 Model metadata is matched to `models.dev` entries by direct ID lookup. If that fails, the extension retries with `{owned_by}/{id}` (e.g. `anthropic/claude-sonnet-4-6`) to handle providers that prefix model IDs.
 
@@ -60,56 +60,3 @@ OpenAI-compatible models are sent to AxonHub `/v1`. Anthropic-owned models are s
 ## GPT Web Search
 
 All `gpt-*` models automatically get a `web_search` tool injected into every request. This enables built-in web search without any configuration.
-
-## Max Effort Support
-
-By default, the extension maps Pi's `xhigh` thinking level to Anthropic's `xhigh` effort for Claude Opus 4.7+/Fable 5, and to `max` for Opus 4.6 (which doesn't support `xhigh`).
-
-To enable **max effort** for all supported Claude models (mapping `xhigh` -> `max`), use one of these methods:
-
-### Method 1: Command (Dynamic Toggle)
-
-Use the `/axonhub-max` command to toggle max effort on/off during a session:
-
-```sh
-/axonhub-max
-```
-
-This will show:
-- `✨ AxonHub max effort enabled (xhigh -> max)` - when turning it on
-- `✨ AxonHub max effort disabled (xhigh -> xhigh)` - when turning it off
-
-After toggling, switch models (Ctrl+P) to apply the new mapping.
-
-### Method 2: Configuration (Persistent)
-
-Add the `useMaxEffort` option to your `~/.pi/agent/settings.json`:
-
-```json
-{
-  "packages": [
-    {
-      "package": "git:github.com/losslauralin/pi-axonhubapi",
-      "options": {
-        "useMaxEffort": true
-      }
-    }
-  ]
-}
-```
-
-This setting persists across sessions.
-
-### How It Works
-
-Effort mapping operates at two levels:
-
-1. **Model registration** (`thinkingLevelMap`): Maps Pi's thinking levels to Anthropic effort values when the provider is registered. This determines the default mapping shown in the model selector.
-2. **Request interception** (`before_provider_request`): When `useMaxEffort` is enabled, the extension intercepts outgoing requests to Claude models (`claude-opus-*`, `claude-sonnet-*`, `claude-haiku-*`, `claude-sonnet-4`, `claude-opus-4`) and overrides `effort: "xhigh"` to `effort: "max"` at runtime. This provides a belt-and-suspenders guarantee.
-
-- **Default behavior**: `xhigh` -> `xhigh` (Opus 4.7+/Fable 5), `xhigh` -> `max` (Opus 4.6 fallback)
-- **With useMaxEffort**: `xhigh` -> `max` (all models that support it)
-
-When max effort is enabled, selecting `xhigh` in Pi (Shift+Tab) will send `max` effort to the Claude API, giving you the absolute maximum capability.
-
-**Note**: According to Claude's documentation, `max` effort should be reserved for genuinely frontier problems, as it can lead to overthinking and higher costs on routine tasks. Use `xhigh` (default) for most coding and agentic work.
