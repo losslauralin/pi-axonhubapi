@@ -2,9 +2,15 @@
 
 Pi extension that discovers AxonHub models from `/v1/models` and `/v1/models?include=all`, enriches them with cached metadata from `https://models.dev/api.json`, and registers them as the `axonhub` provider.
 
-AxonHub models are cached at `~/.cache/pi/axonhub-models.json` for one day. `models.dev` metadata is cached at `~/.cache/pi/models-dev-api.json` for one day. If no API key is configured, the extension does not register the provider.
+AxonHub raw API responses are cached for one day in base-URL-specific files named `~/.cache/pi/axonhub-models-raw-v1-<hash>.json`. Each file contains a versioned envelope with `schemaVersion`, normalized `baseUrl`, `fetchedAt`, and the raw AxonHub payload. The legacy `~/.cache/pi/axonhub-models.json` file is only used as a stale fallback for the default local AxonHub URL.
+
+`models.dev` metadata is cached at `~/.cache/pi/models-dev-api.json` for one day using the same versioned raw-data envelope. Both caches fall back to stale valid data when refreshes fail, and failed or empty AxonHub refreshes never overwrite a usable model list. If no API key is configured, the extension does not register the provider.
+
+The AxonHub cache uses raw API field names such as `context_length`, `max_output_tokens`, `capabilities.reasoning`, and `pricing.cache_read`. Pi runtime fields such as `contextWindow`, `maxTokens`, `reasoning`, `cost.cacheRead`, and `thinkingLevelMap` are created in memory when the provider is registered; they are not expected to appear in the raw cache.
 
 Model metadata is matched to `models.dev` entries by direct ID lookup. If that fails, the extension retries with `{owned_by}/{id}` (e.g. `anthropic/claude-sonnet-4-6`) to handle providers that prefix model IDs.
+
+Reasoning levels are exposed from `models.dev` effort metadata. `xhigh` and `max` remain independent opt-in levels, so a model can support either one or both without request-time rewriting.
 
 ## Usage
 
