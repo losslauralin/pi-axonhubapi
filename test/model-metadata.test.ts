@@ -61,6 +61,69 @@ test("buildThinkingLevelMap represents holes instead of aliasing extended levels
   assert.equal(buildThinkingLevelMap(undefined), undefined);
 });
 
+test("a reasoning toggle exposes off even when effort values omit none", () => {
+  assert.deepEqual(buildThinkingLevelMap(["low", "high", "max"], true), {
+    off: "none",
+    minimal: "low",
+    low: "low",
+    medium: null,
+    high: "high",
+    max: "max",
+  });
+});
+
+test("a reasoning toggle does not invent a map for effort-less metadata", () => {
+  assert.equal(buildThinkingLevelMap(undefined, true), undefined);
+});
+
+test("deepseek-flash toggle plus effort keeps off available", () => {
+  const axonHubRaw: AxonHubModelsResponse = {
+    data: [
+      {
+        id: "deepseek-flash",
+        name: "DeepSeek V4.1 Flash",
+        owned_by: "deepseek",
+        context_length: 1000000,
+        max_output_tokens: 384000,
+        capabilities: { vision: true, reasoning: true },
+      },
+    ],
+  };
+  const modelsDevRaw: ModelsDevResponse = {
+    deepseek: {
+      models: {
+        "deepseek-flash": {
+          id: "deepseek-flash",
+          name: "DeepSeek V4.1 Flash",
+          reasoning: true,
+          reasoning_options: [
+            { type: "toggle" },
+            { type: "effort", values: ["low", "high", "max"] },
+          ],
+        },
+      },
+    },
+  };
+  const rawFlash = axonHubRaw.data?.[0];
+  assert.ok(rawFlash);
+
+  const model = toProviderModel(
+    "http://localhost:8090",
+    rawFlash,
+    modelsDevMatch(rawFlash, modelsDevIndex(modelsDevRaw)),
+  );
+
+  assert.ok(model);
+  assert.deepEqual(model.thinkingLevelMap, {
+    off: "none",
+    minimal: "low",
+    low: "low",
+    medium: null,
+    high: "high",
+    max: "max",
+  });
+});
+
 test("raw Sol metadata becomes a complete Pi provider model", () => {
   const axonHubRaw: AxonHubModelsResponse = {
     data: [

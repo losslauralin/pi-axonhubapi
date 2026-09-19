@@ -10,7 +10,7 @@ The AxonHub cache uses raw API field names such as `context_length`, `max_output
 
 Model metadata is matched to `models.dev` entries by direct ID lookup. If that fails, the extension retries with `{owned_by}/{id}` (e.g. `anthropic/claude-sonnet-4-6`) to handle providers that prefix model IDs.
 
-Reasoning levels are exposed from `models.dev` effort metadata. `xhigh` and `max` remain independent opt-in levels, so a model can support either one or both without request-time rewriting.
+Reasoning levels are exposed from `models.dev` effort metadata. A `{ type: "toggle" }` reasoning option exposes the `off` level even when the effort values contain no `none` value. `xhigh` and `max` remain independent opt-in levels, so a model can support either one or both without request-time rewriting.
 
 ## Usage
 

@@ -147,12 +147,24 @@ function getEffortValues(cached?: ModelsDevModel): Array<string | null> | undefi
   return opt?.values;
 }
 
-export function buildThinkingLevelMap(effortValues: Array<string | null> | undefined): ThinkingLevelMap | undefined {
+/**
+ * models.dev advertises toggleable reasoning with `{ type: "toggle" }`, separately from the
+ * `effort` option. Models that have both (e.g. deepseek) can still be turned off, so `toggle`
+ * alone is enough to expose the `off` level even when no effort value literally says "none".
+ */
+function canDisableReasoning(cached?: ModelsDevModel): boolean {
+  return cached?.reasoning_options?.some((option) => option.type === "toggle") ?? false;
+}
+
+export function buildThinkingLevelMap(
+  effortValues: Array<string | null> | undefined,
+  toggleable = false,
+): ThinkingLevelMap | undefined {
   if (!effortValues || effortValues.length === 0) return undefined;
 
   const supported = new Set(effortValues.filter((value): value is string => typeof value === "string"));
   const map: ThinkingLevelMap = {
-    off: supported.has("none") ? "none" : null,
+    off: toggleable || supported.has("none") ? "none" : null,
     minimal: null,
     low: null,
     medium: null,
@@ -206,6 +218,7 @@ export function toProviderModel(
   const owner = ownerFromMatch(item, match);
   const supportsVision = item.capabilities?.vision ?? cached?.attachment ?? hasModality(cached, "input", "image") ?? true;
   const effortValues = getEffortValues(cached);
+  const toggleable = canDisableReasoning(cached);
 
   return {
     id: item.id,
@@ -221,7 +234,7 @@ export function toProviderModel(
     },
     contextWindow: item.context_length ?? cached?.limit?.context ?? 200000,
     maxTokens: item.max_output_tokens ?? cached?.limit?.output ?? 32000,
-    thinkingLevelMap: buildThinkingLevelMap(effortValues),
+    thinkingLevelMap: buildThinkingLevelMap(effortValues, toggleable),
     compat: modelCompat(owner, effortValues),
     baseUrl: modelBaseUrl(baseUrl, owner),
   };
